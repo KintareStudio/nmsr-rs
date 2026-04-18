@@ -18,11 +18,11 @@ pub enum RenderRequestEntry {
     GeyserPlayerUuid(Uuid),
     TextureHash(String),
     DefaultSkinTextureHash(String),
-    PlayerSkin(#[debug(skip)] Vec<u8>, #[debug(skip)] Option<Vec<u8>>),
+    PlayerSkin(#[debug(skip)] Option<Vec<u8>>, #[debug(skip)] Option<Vec<u8>>),
 }
 
 impl RenderRequestEntry {
-    pub fn new_from_skin_and_cape(skin: Vec<u8>, cape: Option<Vec<u8>>) -> Self {
+    pub fn new_from_skin_and_cape(skin: Option<Vec<u8>>, cape: Option<Vec<u8>>) -> Self {
         Self::PlayerSkin(skin, cape)
     }
 

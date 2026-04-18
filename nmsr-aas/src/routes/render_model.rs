@@ -90,12 +90,58 @@ pub(crate) async fn internal_render_model<'a>(
 
     load_textures(resolved, state, request, &mut part_context, &mut scene).await?;
 
+    let show_front_back = request.mode.is_kintare_skin()
+        || request.mode.is_kintare_cape()
+        || request
+            .extra_settings
+            .as_ref()
+            .map_or(false, |s| s.show_front_back);
+
     scene.render(&state.graphics_context)?;
 
-    let render = scene
-        .copy_output_texture(&state.graphics_context, true)
-        .await?;
-    let render_bytes = create_png_from_bytes((size.width, size.height), &render)?;
+    let render_bytes = if show_front_back {
+        // Capture the front view
+        let front_pixels = scene
+            .copy_output_texture(&state.graphics_context, true)
+            .await?;
+
+        // Rotate camera yaw by -180 degrees for the back view
+        *scene.camera_mut().get_yaw_as_mut() -= 180.0;
+
+        // Recompute lighting based on the new camera orientation by temporarily
+        // enabling show_back on the request so get_lighting() derives from the
+        // back-facing camera
+        let had_show_back = request
+            .extra_settings
+            .as_ref()
+            .map_or(false, |s| s.show_back);
+        if let Some(settings) = request.extra_settings.as_mut() {
+            settings.show_back = true;
+        }
+        let back_lighting = request.get_lighting();
+        if let Some(settings) = request.extra_settings.as_mut() {
+            settings.show_back = had_show_back;
+        }
+        *scene.sun_information_mut() = back_lighting;
+
+        // Update the scene with new camera and lighting
+        scene.update(&state.graphics_context);
+
+        // Render the back view
+        scene.render(&state.graphics_context)?;
+        let back_pixels = scene
+            .copy_output_texture(&state.graphics_context, true)
+            .await?;
+
+        // Stitch front and back side-by-side
+        let combined = stitch_side_by_side(&front_pixels, &back_pixels, size.width, size.height);
+        create_png_from_bytes((size.width * 2, size.height), &combined)?
+    } else {
+        let render = scene
+            .copy_output_texture(&state.graphics_context, true)
+            .await?;
+        create_png_from_bytes((size.width, size.height), &render)?
+    };
 
     #[cfg(feature = "renderdoc")]
     {
@@ -176,6 +222,17 @@ async fn load_textures<'a>(
     part_provider: &mut PlayerPartProviderContext<VanillaMinecraftArmorMaterialData>,
     scene: &mut Scene<Object<SceneContextPoolManager<'a>>>,
 ) -> Result<()> {
+    // If no skin texture is present (e.g. cape-only upload), use a fully transparent
+    // fallback so only the cape is visible without a mannequin body
+    if !resolved.textures.contains_key(&ResolvedRenderEntryTextureType::Skin) {
+        let fallback_skin = RgbaImage::from_pixel(64, 64, image::Rgba([0, 0, 0, 0]));
+        scene.set_texture(
+            &state.graphics_context,
+            PlayerPartTextureType::Skin,
+            &fallback_skin,
+        );
+    }
+
     for (&texture_type, texture_bytes) in &resolved.textures {
         let expected_size = PlayerPartTextureType::from(texture_type).get_texture_size();
 
@@ -348,4 +405,20 @@ pub(crate) fn create_part_context(
     }
 
     context
+}
+
+fn stitch_side_by_side(
+    left: &[u8], right: &[u8],
+    single_width: u32, height: u32,
+) -> Vec<u8> {
+    let row_bytes = (single_width * 4) as usize;
+    let combined_row = row_bytes * 2;
+    let mut out = vec![0u8; combined_row * height as usize];
+    for y in 0..height as usize {
+        out[y * combined_row..y * combined_row + row_bytes]
+            .copy_from_slice(&left[y * row_bytes..(y + 1) * row_bytes]);
+        out[y * combined_row + row_bytes..(y + 1) * combined_row]
+            .copy_from_slice(&right[y * row_bytes..(y + 1) * row_bytes]);
+    }
+    out
 }

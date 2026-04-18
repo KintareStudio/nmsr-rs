@@ -60,6 +60,9 @@ pub struct RenderRequestQueryParams {
 
     pub back: Option<String>,
 
+    #[serde(alias = "frontback")]
+    pub front_back: Option<String>,
+
     #[serde(alias = "w")]
     pub width: Option<u32>,
     #[serde(alias = "h")]
@@ -117,7 +120,7 @@ pub struct RenderRequestMultipartParams {
     #[serde(flatten)]
     pub query: RenderRequestQueryParams,
     #[serde(alias = "texture")]
-    pub skin: Vec<u8>,
+    pub skin: Option<Vec<u8>>,
     pub cape: Option<Vec<u8>>,
 }
 

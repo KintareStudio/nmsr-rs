@@ -63,6 +63,9 @@ pub struct RenderRequestExtraSettings {
     #[is_empty(if = "is_false")]
     pub show_back: bool,
 
+    #[is_empty(if = "is_false")]
+    pub show_front_back: bool,
+
     pub width: Option<u32>,
     pub height: Option<u32>,
 

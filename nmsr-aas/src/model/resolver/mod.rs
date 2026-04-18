@@ -5,7 +5,7 @@ use self::{
 use super::request::{
     cache::ModelCache,
     entry::{RenderRequestEntry, RenderRequestEntryModel},
-    RenderRequest,
+    RenderRequest, RenderRequestMode,
 };
 #[cfg(feature = "ears")]
 use crate::model::request::RenderRequestFeatures;
@@ -212,6 +212,38 @@ impl ResolvedRenderEntryTextures {
     }
 }
 
+/// Detects whether a skin texture uses the slim (Alex) or classic (Steve) model
+/// by checking pixels in the right arm area that are only used in the classic layout.
+///
+/// In classic skins, the right arm back face occupies x=52-55, y=20-31 (base 64x64).
+/// In slim skins, it only occupies x=51-53, so x=54-55 is unused (transparent).
+/// Coordinates scale proportionally for HD textures (128x128, 256x256, etc.).
+fn detect_slim_model(skin_data: &[u8]) -> Option<RenderRequestEntryModel> {
+    let img = image::load_from_memory(skin_data).ok()?.into_rgba8();
+    let (width, height) = img.dimensions();
+
+    if width < 64 || height < 64 || width % 64 != 0 {
+        return None;
+    }
+
+    let scale = width / 64;
+
+    for base_x in 54..=55 {
+        for base_y in 20..=31 {
+            for dx in 0..scale {
+                for dy in 0..scale {
+                    let pixel = img.get_pixel(base_x * scale + dx, base_y * scale + dy);
+                    if pixel[3] != 0 {
+                        return Some(RenderRequestEntryModel::Steve);
+                    }
+                }
+            }
+        }
+    }
+
+    Some(RenderRequestEntryModel::Alex)
+}
+
 impl RenderRequestResolver {
     pub fn new(model_cache: ModelCache, client: Arc<MojangClient>) -> Self {
         Self {
@@ -266,6 +298,7 @@ impl RenderRequestResolver {
     async fn resolve_entry_textures(
         &self,
         entry: &RenderRequestEntry,
+        mode: RenderRequestMode,
     ) -> Result<ResolvedRenderEntryTextures> {
         #[cfg_attr(not(feature = "ears"), allow(unused_mut))]
         if let Some(mut result) = self.model_cache.get_cached_resolved_texture(entry).await? {
@@ -307,7 +340,7 @@ impl RenderRequestResolver {
                 };
 
                 return Box::pin(
-                    self.resolve_entry_textures(&RenderRequestEntry::MojangPlayerUuid(id)),
+                    self.resolve_entry_textures(&RenderRequestEntry::MojangPlayerUuid(id), mode),
                 )
                 .await;
             }
@@ -368,14 +401,25 @@ impl RenderRequestResolver {
 
                 model = Some(player_model);
             }
-            RenderRequestEntry::TextureHash(skin_hash) => {
-                // If the skin is not cached, we'll have to fetch it from Mojang.
-                skin_texture = Some(
-                    self.fetch_texture_from_mojang(skin_hash, None, MojangTextureRequestType::Skin)
-                        .await?,
-                );
-                cape_texture = None;
-                model = None;
+            RenderRequestEntry::TextureHash(hash) => {
+                let is_cape_mode = mode.is_kintare_cape() || mode.is_cape();
+                if is_cape_mode {
+                    skin_texture = None;
+                    cape_texture = Some(
+                        self.fetch_texture_from_mojang(hash, None, MojangTextureRequestType::Cape)
+                            .await?,
+                    );
+                    model = None;
+                } else {
+                    skin_texture = Some(
+                        self.fetch_texture_from_mojang(hash, None, MojangTextureRequestType::Skin)
+                            .await?,
+                    );
+                    cape_texture = None;
+                    model = skin_texture
+                        .as_ref()
+                        .and_then(|t| detect_slim_model(t.data()));
+                }
             }
             RenderRequestEntry::DefaultSkinTextureHash(skin_hash) => {
                 // Handle default skin textures. These have to go straight to Mojang, whether or not the user changed the config.
@@ -391,7 +435,7 @@ impl RenderRequestResolver {
                 model = None;
             }
             RenderRequestEntry::PlayerSkin(skin_bytes, cape_bytes) => {
-                skin_texture = Some(MojangTexture::new_unnamed(skin_bytes.clone()));
+                skin_texture = skin_bytes.as_ref().map(|b| MojangTexture::new_unnamed(b.clone()));
                 cape_texture = cape_bytes.to_owned().map(|b| MojangTexture::new_unnamed(b));
                 model = None;
             }
@@ -634,7 +678,7 @@ impl RenderRequestResolver {
     async fn resolve_raw(&self, request: &RenderRequest) -> Result<ResolvedRenderRequest> {
         // First, we need to resolve the skin and cape textures.
         let resolved_textures = self
-            .resolve_entry_textures(&request.entry)
+            .resolve_entry_textures(&request.entry, request.mode)
             .await
             .map_err(|e| {
                 MojangRequestError::UnableToResolveRenderRequestEntity(

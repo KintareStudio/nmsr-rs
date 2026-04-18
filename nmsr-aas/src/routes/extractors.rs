@@ -119,6 +119,7 @@ where
             roll: query.roll,
 
             show_back: query.back.is_some(),
+            show_front_back: query.front_back.is_some(),
 
             custom_arm_rotation: query.arms,
             distance: query.distance,

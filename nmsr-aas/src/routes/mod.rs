@@ -240,7 +240,7 @@ impl<'a> NMSRState<'a> {
 
         distance_offset += match mode {
             RenderRequestMode::Face => 0.75,
-            RenderRequestMode::FullBodyIso | RenderRequestMode::FrontFull => -1.0,
+            RenderRequestMode::FullBodyIso | RenderRequestMode::FrontFull | RenderRequestMode::KintareSkin => -1.0,
             RenderRequestMode::HeadIso => -0.5,
             RenderRequestMode::FullBody | RenderRequestMode::BodyBust => 2.0,
             RenderRequestMode::FrontBust => -2.5,

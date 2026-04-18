@@ -35,6 +35,10 @@ pub enum RenderRequestMode {
     #[strum(serialize = "head_iso", serialize = "headiso")]
     HeadIso,
     Custom,
+    #[strum(serialize = "kintareskin", serialize = "kintare_skin")]
+    KintareSkin,
+    #[strum(serialize = "kintarecape", serialize = "kintare_cape")]
+    KintareCape,
 }
 
 #[allow(dead_code)]
@@ -44,18 +48,18 @@ impl RenderRequestMode {
     }
 
     pub(crate) const fn is_full_body(self) -> bool {
-        matches!(self, Self::FullBody | Self::FullBodyIso)
+        matches!(self, Self::FullBody | Self::FullBodyIso | Self::KintareSkin | Self::KintareCape)
     }
 
     pub(crate) const fn is_isometric(self) -> bool {
         matches!(
             self,
-            Self::FullBodyIso | Self::HeadIso | Self::FrontBust | Self::FrontFull | Self::Face
+            Self::FullBodyIso | Self::HeadIso | Self::FrontBust | Self::FrontFull | Self::Face | Self::KintareSkin | Self::KintareCape
         )
     }
 
     pub(crate) const fn is_front(self) -> bool {
-        matches!(self, Self::FrontBust | Self::FrontFull | Self::Face)
+        matches!(self, Self::FrontBust | Self::FrontFull | Self::Face | Self::KintareCape)
     }
 
     pub(crate) const fn is_bust(self) -> bool {
@@ -94,6 +98,14 @@ impl RenderRequestMode {
 
     pub(crate) const fn is_cape(self) -> bool {
         matches!(self, Self::Cape)
+    }
+
+    pub(crate) const fn is_kintare_skin(self) -> bool {
+        matches!(self, Self::KintareSkin)
+    }
+
+    pub(crate) const fn is_kintare_cape(self) -> bool {
+        matches!(self, Self::KintareCape)
     }
 
     pub(crate) const fn is_blockbench_export(self) -> bool {
@@ -215,12 +227,17 @@ impl RenderRequestMode {
                 aspect -= 3.0;
             }
 
+            // Cape-only: tighter view since only the cape is visible (no body)
+            if self.is_kintare_cape() {
+                aspect = 10.0;
+            }
+
             ProjectionParameters::Orthographic { aspect }
         } else {
             ProjectionParameters::Perspective { fov: 45.0 }
         };
 
-        let rotation = if self.is_front() || self.is_custom() {
+        let mut rotation = if self.is_front() || self.is_custom() {
             CameraRotation {
                 yaw: 0.0,
                 pitch: 0.0,
@@ -246,6 +263,11 @@ impl RenderRequestMode {
             }
         };
 
+        // KintareCape: face the back where the cape is visible
+        if self.is_kintare_cape() {
+            rotation.yaw = -180.0;
+        }
+
         let look_at = [0.0, look_at_y, 0.0].into();
         Camera::new_orbital(look_at, distance, rotation, projection, None)
     }
@@ -260,7 +282,7 @@ impl RenderRequestMode {
     #[instrument(level = "trace", skip(self))]
     pub(crate) fn get_body_parts(&self) -> Vec<PlayerBodyPartType> {
         match self {
-            Self::Custom | Self::FullBody | Self::FrontFull | Self::FullBodyIso => {
+            Self::Custom | Self::FullBody | Self::FrontFull | Self::FullBodyIso | Self::KintareSkin | Self::KintareCape => {
                 PlayerBodyPartType::iter().collect()
             }
             Self::Head | Self::HeadIso | Self::Face => {
