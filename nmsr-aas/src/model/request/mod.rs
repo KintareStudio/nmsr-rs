@@ -240,11 +240,20 @@ impl RenderRequest {
     }
 
     pub(crate) fn get_lighting(&self) -> SunInformation {
+        self.get_lighting_for_camera(&self.get_camera())
+    }
+
+    /// The same lighting, but derived from a camera the caller already has.
+    ///
+    /// [`Self::get_lighting`] rebuilds the camera from the request, which is only correct
+    /// while the two agree. A caller that has moved the camera itself - rendering the same
+    /// scene from behind, say - must use this, or it will light the new view with the old
+    /// view's sun.
+    pub(crate) fn get_lighting_for_camera(&self, camera: &Camera) -> SunInformation {
         if !self.features.contains(RenderRequestFeatures::Shading) {
             return SunInformation::new([0.0; 3].into(), 0.0, 1.0);
         }
 
-        let camera = self.get_camera();
         let one_eighty_diff = (camera.get_yaw().abs() - 180.0).abs();
         let yaw = if one_eighty_diff < 0.01 {
             camera.get_yaw().abs() + 90.0

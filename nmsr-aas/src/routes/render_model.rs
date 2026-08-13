@@ -105,23 +105,15 @@ pub(crate) async fn internal_render_model<'a>(
             .copy_output_texture(&state.graphics_context, true)
             .await?;
 
-        // Rotate camera yaw by -180 degrees for the back view
-        *scene.camera_mut().get_yaw_as_mut() -= 180.0;
-
-        // Recompute lighting based on the new camera orientation by temporarily
-        // enabling show_back on the request so get_lighting() derives from the
-        // back-facing camera
-        let had_show_back = request
-            .extra_settings
-            .as_ref()
-            .map_or(false, |s| s.show_back);
-        if let Some(settings) = request.extra_settings.as_mut() {
-            settings.show_back = true;
-        }
-        let back_lighting = request.get_lighting();
-        if let Some(settings) = request.extra_settings.as_mut() {
-            settings.show_back = had_show_back;
-        }
+        // Rotate camera yaw by -180 degrees for the back view, and relight from where the
+        // camera now is. Derived from the scene's own camera rather than from the request:
+        // this rotation exists only here, so rebuilding the camera from the request would
+        // hand back the front-facing one and light the back view with the front's sun.
+        let back_lighting = {
+            let camera = scene.camera_mut();
+            *camera.get_yaw_as_mut() -= 180.0;
+            request.get_lighting_for_camera(camera)
+        };
         *scene.sun_information_mut() = back_lighting;
 
         // Update the scene with new camera and lighting
