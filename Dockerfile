@@ -42,5 +42,8 @@ RUN chmod +x /nmsr/nmsr-aas
 
 EXPOSE 8080
 
-# Set the entrypoint script
-CMD /nmsr/nmsr-aas -c config.toml
+# Exec form, not shell form. `CMD /nmsr/nmsr-aas -c config.toml` runs under `/bin/sh -c`,
+# which makes the shell PID 1: `docker stop` then delivers SIGTERM to the shell, which does
+# not forward it, so the server never shuts down cleanly and is SIGKILLed once the grace
+# period runs out. In exec form the server is PID 1 and receives the signal itself.
+CMD ["/nmsr/nmsr-aas", "-c", "config.toml"]
