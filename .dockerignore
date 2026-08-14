@@ -1,0 +1,18 @@
+# The Dockerfile builds this repository via `COPY . .`, so everything here is build
+# context that has to be uploaded to the daemon. Without this file that is ~794M, almost
+# all of it target/.
+target/
+
+# Deliberately NOT ignored: .git/ (~9M).
+#
+# nmsr-aas/build.rs runs `git rev-parse --short=12 HEAD` to stamp the binary's version and
+# returns Err if git fails, so a context without .git/ does not build a versionless binary
+# - it fails the image build.
+
+# Not needed to compile, and cheap to leave out.
+.github/
+.assets/
+nmsr-debug-ui.html
+LICENSE-APACHE
+LICENSE-MIT
+README.md

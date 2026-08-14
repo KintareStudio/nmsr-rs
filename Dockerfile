@@ -1,25 +1,26 @@
 FROM rust:slim-bookworm AS builder
 
-WORKDIR /tmp/
-
+# git earns its place twice over: cargo fetches ears-rs from a git source, and
+# nmsr-aas/build.rs shells out to `git rev-parse HEAD` for the version string and fails
+# the build outright if it cannot. That is also why .dockerignore keeps .git/.
 RUN apt-get update -y && apt-get --no-install-recommends install git libssl-dev pkg-config -y
-RUN git clone https://github.com/NickAcPT/nmsr-rs/
 
 WORKDIR /tmp/nmsr-rs/
 
-RUN git checkout main
-
-# Overlay local Kintare customizations on top of upstream
-COPY ./nmsr-aas/src/model/request/mode.rs /tmp/nmsr-rs/nmsr-aas/src/model/request/mode.rs
-COPY ./nmsr-aas/src/model/request/mod.rs /tmp/nmsr-rs/nmsr-aas/src/model/request/mod.rs
-COPY ./nmsr-aas/src/model/request/entry.rs /tmp/nmsr-rs/nmsr-aas/src/model/request/entry.rs
-COPY ./nmsr-aas/src/model/resolver/mod.rs /tmp/nmsr-rs/nmsr-aas/src/model/resolver/mod.rs
-COPY ./nmsr-aas/src/routes/render.rs /tmp/nmsr-rs/nmsr-aas/src/routes/render.rs
-COPY ./nmsr-aas/src/routes/render_model.rs /tmp/nmsr-rs/nmsr-aas/src/routes/render_model.rs
-COPY ./nmsr-aas/src/routes/render_skin.rs /tmp/nmsr-rs/nmsr-aas/src/routes/render_skin.rs
-COPY ./nmsr-aas/src/routes/mod.rs /tmp/nmsr-rs/nmsr-aas/src/routes/mod.rs
-COPY ./nmsr-aas/src/routes/query.rs /tmp/nmsr-rs/nmsr-aas/src/routes/query.rs
-COPY ./nmsr-aas/src/routes/extractors.rs /tmp/nmsr-rs/nmsr-aas/src/routes/extractors.rs
+# Build this repository, rather than a clone of upstream.
+#
+# Upstream's Dockerfile runs `git clone https://github.com/NickAcPT/nmsr-rs/` and builds
+# that, ignoring the build context entirely. Which is right for NickAc, since that URL is
+# his code - but for a fork it means our changes never reach the image. This file used to
+# work around it by leaving the clone in place and copying ten .rs files over the top,
+# immediately before the build.
+#
+# Two things were wrong with that. The clone tracked `main` with no pin, so an image built
+# today and one built last month contained different upstream code; and the ten copied
+# files were a frozen snapshot that silently reverted upstream's later edits to those same
+# files. That is how the build lost `strip_alpha`, and with it the alpha split between the
+# skin's first and second layer.
+COPY . .
 
 RUN RUSTFLAGS="-Ctarget-cpu=native" cargo build --release --bin nmsr-aas --features ears --package nmsr-aas
 
