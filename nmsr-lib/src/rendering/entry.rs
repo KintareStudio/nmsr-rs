@@ -12,8 +12,6 @@ pub struct RenderingEntry {
     pub model: PlayerModel,
     pub render_shading: bool,
     pub render_layers: bool,
-    #[cfg(feature = "ears")]
-    pub ears_features: Option<EarsFeatures>,
 }
 
 impl Debug for RenderingEntry {
@@ -30,12 +28,6 @@ impl RenderingEntry {
     pub fn process_skin(skin: RgbaImage) -> Result<RgbaImage> {
         // Make sure the skin is 64x64
         let mut skin = ears_rs::utils::upgrade_skin_if_needed(skin);
-
-        #[cfg(feature = "ears")]
-        {
-            // If using Ears, process the erase sections specified in the Alfalfa data
-            ears_rs::utils::process_erase_regions(&mut skin)?;
-        }
 
         // Strip the alpha data from the skin
         ears_rs::utils::strip_alpha(&mut skin);
@@ -57,9 +49,6 @@ impl RenderingEntry {
         render_shading: bool,
         render_layers: bool,
     ) -> Result<RenderingEntry> {
-        #[cfg(feature = "ears")]
-        let ears_features = EarsParser::parse(&skin)?;
-
         let skin = RenderingEntry::process_skin(skin)?;
 
         Ok(RenderingEntry {
@@ -70,8 +59,6 @@ impl RenderingEntry {
             },
             render_shading,
             render_layers,
-            #[cfg(feature = "ears")]
-            ears_features,
         })
     }
 }
