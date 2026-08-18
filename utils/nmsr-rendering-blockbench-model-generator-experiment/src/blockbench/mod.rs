@@ -68,25 +68,43 @@ fn generate_outliner_groups<M: ArmorMaterial, I: ModelProjectImageIO>(
     // First, let's store our parts in the following structure:
     let mut root_group = BlockbenchGroupEntry::new_root();
 
+    
+    #[cfg(feature = "part_tracker")]
+    let group_name_len = |(_, p): &(usize, &mut Part)| p.get_group().len();
+    
+    #[cfg(not(feature = "part_tracker"))]
+    let group_name_len = |(_, _): &(usize, &mut Part)| 0; // There are no group names when we're not tracking parts
+    
     for (index, part) in parts
         .into_iter()
         .enumerate()
-        .sorted_by_key(|(_, p)| p.get_group().len())
+        .sorted_by_key(group_name_len)
     {
-        let part_id: Uuid = str_to_uuid(&project.get_part_name(part.get_name(), index));
+        #[cfg(feature = "part_tracker")]
+        let part_name = part.get_name();
+        
+        #[cfg(not(feature = "part_tracker"))]
+        let part_name = None;
+        
+        let part_id: Uuid = str_to_uuid(&project.get_part_name(part_name, index));
         // Part groups is a vector of strings, each string being a group name - The last group name is the parent group
+        
+        #[cfg(feature = "part_tracker")]
         let part_groups: Vec<String> = part.get_group().to_vec();
-
+        
+        #[cfg(not(feature = "part_tracker"))]
+        let part_groups: Vec<String> = vec![];
+    
         let parent_count = part_groups.len().saturating_sub(1);
-
+    
         let mut rotation_stack = Vec::new();
-
+    
         // Group our part names in a tree-like structure
         let mut current_group = &mut root_group;
         for group in part_groups {
             // Find our current group in the tree
             current_group = current_group.add_or_get_group(group);
-
+    
             if let BlockbenchGroupEntry::Group {
                 ref mut origin,
                 ref mut rotation,
@@ -97,7 +115,7 @@ fn generate_outliner_groups<M: ArmorMaterial, I: ModelProjectImageIO>(
                 rotation_stack.push((name.to_owned(), origin.to_owned(), rotation.to_owned()));
             }
         }
-
+    
         if let BlockbenchGroupEntry::Group {
             ref mut origin,
             ref mut rotation,
@@ -107,10 +125,10 @@ fn generate_outliner_groups<M: ArmorMaterial, I: ModelProjectImageIO>(
             if !matches!(part, Part::Group { .. }) {
                 let group_has_no_rotation = origin.abs_diff_eq(Vec3::ZERO, f32::EPSILON)
                     && rotation.abs_diff_eq(Vec3::ZERO, f32::EPSILON);
-
+    
                 let (part_origin, _) =
                     RawProjectElement::get_blockbench_part_origin_and_rotation(&part);
-
+    
                 if group_has_no_rotation {
                     if parent_count < 2 {
                         *origin = part_origin;
@@ -119,11 +137,18 @@ fn generate_outliner_groups<M: ArmorMaterial, I: ModelProjectImageIO>(
                 }
             }
         }
-
+    
         for (n, parent_origin, parent_rot) in rotation_stack.into_iter().rev().skip(1) {
+            
+            #[cfg(feature = "part_tracker")]
+            let part_name = part.get_name();
+            
+            #[cfg(not(feature = "part_tracker"))]
+            let part_name: Option<&str> = None;
+            
             println!(
                 "Part: {:?} Parent: {:?}, Origin: {:?}, Rotation: {:?}",
-                part.get_name(),
+                part_name,
                 n,
                 parent_origin,
                 parent_rot
@@ -133,7 +158,7 @@ fn generate_outliner_groups<M: ArmorMaterial, I: ModelProjectImageIO>(
                 Some(PartAnchorInfo::new_rotation_anchor_position(parent_origin)),
             );
         }
-
+    
         // Add our part to the group
         current_group.add_entry(part_id);
     }
@@ -148,13 +173,16 @@ fn convert_to_raw_elements<M: ArmorMaterial, I: ModelProjectImageIO>(
     let parts = grouped_parts
         .into_iter()
         .flat_map(|(_, parts)| parts)
-        //.filter(|p| p.get_name().map(|n| n.contains("Tail")).unwrap_or_default())
         .enumerate()
         .map(|(index, part)| -> Result<_> {
             #[cfg(feature = "markers")]
             let markers = part.part_tracking_data().markers().to_vec();
-
+            
+            #[cfg(feature = "part_tracker")]
             let name = part.part_tracking_data().name().map(|s| s.as_str());
+            
+            #[cfg(not(feature = "part_tracker"))]
+            let name = None;
 
             let element = match &part {
                 part => {
@@ -176,17 +204,22 @@ fn convert_to_raw_elements<M: ArmorMaterial, I: ModelProjectImageIO>(
         });
 
     #[cfg(feature = "markers")]
-    let parts = parts.flat_map(|(markers, element)| {
+    let parts: Vec<std::prelude::v1::Result<Vec<RawProjectElement>, crate::error::BlockbenchGeneratorError>> = parts.map_ok(|(markers, element)| {
         vec![element].into_iter().chain(
             markers
                 .into_iter()
                 .map(|m| RawProjectElement::new_null(m.name, m.position)),
         )
-    });
+        .collect::<Vec<_>>()
+    }).collect_vec();
 
     let mut result = Vec::new();
 
     for part in parts {
+        #[cfg(feature = "markers")]
+        result.extend(part?);
+
+        #[cfg(not(feature = "markers"))]
         result.push(part?);
     }
 
