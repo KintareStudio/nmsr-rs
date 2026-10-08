@@ -86,10 +86,15 @@ impl RawProjectElement {
         let affine = part.get_transformation();
         let (_, rotation, translation) = affine.to_scale_rotation_translation();
 
+        
+        #[cfg(feature = "part_tracker")]
         let origin = part
             .part_tracking_data()
             .last_rotation_origin()
             .unwrap_or(translation);
+        
+        #[cfg(not(feature = "part_tracker"))]
+        let origin = translation;
 
         let (r_x, r_y, r_z) = rotation.to_euler(glam::EulerRot::XYZ);
 

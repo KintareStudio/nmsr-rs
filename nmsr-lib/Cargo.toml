@@ -12,9 +12,9 @@ qoi = "0.4"
 thiserror = { workspace = true }
 ears-rs = { workspace = true }
 rayon = { version = "1.11", optional = true }
-vfs = { version = "0.12" }
+vfs = { version = "0.13" }
 serde = { version = "1.0", features = ["derive"], optional = true }
-rkyv = { version = "0.8.12", optional = true }
+rkyv = { version = "0.8.18", optional = true }
 either = "1.15"
 tracing = "0.1"
 
@@ -26,12 +26,11 @@ default = []
 parallel_iters = ["dep:rayon"]
 serializable_parts = ["dep:serde"]
 serializable_parts_rkyv = ["dep:rkyv"]
-ears = []
 
 [dev-dependencies]
-criterion = { version = "0.5", features = ["html_reports"] }
+criterion = { version = "0.8", features = ["html_reports"] }
 rust-embed = "8.*"
-vfs = { version = "0.12", features = ["embedded-fs"] }
+vfs = { version = "0.13", features = ["embedded-fs"] }
 
 [[bench]]
 name = "uv_loading"

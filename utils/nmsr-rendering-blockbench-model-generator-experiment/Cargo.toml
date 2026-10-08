@@ -23,7 +23,8 @@ base64 = { workspace = true }
 xxhash-rust = { workspace = true, features = ["xxh3"] }
 
 [features]
-default = ["nmsr-rendering/part_tracker"]
+default = ["part_tracker"]
 wasm = ["dep:wasm-bindgen", "dep:serde-wasm-bindgen"]
 ears = ["nmsr-rendering/ears"]
 markers = ["nmsr-rendering/markers"]
+part_tracker = ["nmsr-rendering/part_tracker"]
